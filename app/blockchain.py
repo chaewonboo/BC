@@ -10,14 +10,9 @@ class Blockchain:
         self.chain = []
         self.pending_transactions = []
         self.current_node_url = current_node_url
-        self.merkle_tree_proecss = []
         self.network_nodes = []
+        self.create_genesis_block()
         
-        
-        self.add_genesis_transaction({'amount' : 50,'sender': '0','recipient':self.node_address(),'transaction_id' : str(uuid4()).replace('-','')})
-        self.genesis_merkleroot = self.create_merkle_tree([self.hash_function(str(tx)) for tx in self.pending_transactions])
-        self.genesis_nonce = self.proof_of_work(self.hash_function('0'), {'merkle_root':self.genesis_merkleroot,'index' : 1})
-        self.create_new_block(self.genesis_nonce, self.hash_function('0'), self.hash_block(self.hash_function('0'), {'merkle_root':self.genesis_merkleroot,'index' : 1},self.genesis_nonce), self.genesis_merkleroot)
         
 
     def create_new_block(self, nonce, previous_block_hash, hash_, merkle_root):
@@ -72,26 +67,29 @@ class Blockchain:
 
     def chain_is_valid(self, chain):
         genesis_block = chain[0]
-        correct_nonce = genesis_block['nonce'] == 100
-        correct_previous_block_hash = genesis_block['previous_blockHash'] == '0'
-        correct_hash = genesis_block['hash'] == '0'
-        correct_transactions = len(genesis_block['transactions']) == 0
+        #proof_of_work함수 써서 nonce값이 맞는지 검증
+        #self.proof_of_work(genesis_block['previous_block_hash'], genesis_block['merkle_root']{})
+        correct_nonce = genesis_block['nonce'] == self.proof_of_work(genesis_block['previous_block_hash'], {'merkle_root': genesis_block['merkle_root'], 'index': 1})
+        correct_previous_block_hash = genesis_block['previous_block_hash'] == self.hash_function('0') #genesis block의 hash값은 "0" hash한것
+        #hash_block함수 써서 hash값 맞는지 검증
+        correct_hash = genesis_block['hash'] == self.hash_block(genesis_block['previous_block_hash'], {'merkle_root': genesis_block['merkle_root']}, genesis_block['nonce']) 
+        correct_transactions = len(genesis_block['transactions']) == 1 #genesis block의 tx의 길이는 1(coinbase tx)
         validChain  = True
 
         if not (correct_nonce and correct_previous_block_hash and correct_hash and correct_transactions):
-            print("1")
             validChain = False
 
         for i in range(1, len(chain)):
             current_block = chain[i]
             prev_block = chain[i - 1]
 
-            block_hash = self.hash_block(prev_block['hash'],{"transactions": current_block['transactions'], "index": current_block['index']}, current_block['nonce'])
+            block_hash = self.hash_block(prev_block['hash'],{"merkle_root": current_block['merkle_root'], "index": current_block['index']}, current_block['nonce'])
             print(block_hash)
-            if block_hash[:4] != '0000':
+            #채우시오 hash 값 앞 4자리가 0이 아니면 false:
+            if block_hash[:4]!= '0000':
                 validChain = False
-
-            if current_block['previousBlockHash'] != prev_block['hash']:
+            #채우시오 이전 block의 hash값은 현재 블럭의 previous_block_hash랑 같아야함:
+            if prev_block['block_hash']!= current_block['previous_block_hash']:
                 validChain = False
 
         return validChain
@@ -184,3 +182,11 @@ class Blockchain:
     def node_address(self):
         node_address = str(uuid4()).replace('-', '')
         return node_address
+    
+    def create_genesis_block(self):
+        self.merkle_tree_proecss = []
+        self.add_genesis_transaction({'amount' : 50,'sender': '0','recipient':self.node_address(),'transaction_id' : str(uuid4()).replace('-','')})
+        self.genesis_merkleroot = self.create_merkle_tree([self.hash_function(str(tx)) for tx in self.pending_transactions])
+        self.genesis_nonce = self.proof_of_work(self.hash_function('0'), {'merkle_root':self.genesis_merkleroot,'index' : 1})
+        self.create_new_block(self.genesis_nonce, self.hash_function('0'), self.hash_block(self.hash_function('0'), {'merkle_root':self.genesis_merkleroot,'index' : 1},self.genesis_nonce), self.genesis_merkleroot)
+    

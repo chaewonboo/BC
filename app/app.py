@@ -13,7 +13,19 @@ node_address = bitcoin.node_address
 
 @app.route('/blockchain', methods=['GET']) #전체 블록을 보여줌
 def get_blockchain():
-    return jsonify(bitcoin.__dict__)
+    blockchain_data = bitcoin.__dict__.copy() 
+
+    blockchain_data.pop('genesis_merkleroot', None)
+    blockchain_data.pop('genesis_nonce', None)
+    blockchain_data.pop('merkle_tree_process', None)
+
+    response = {
+        'chain': blockchain_data['chain'],
+        'pending_transactions': blockchain_data['pending_transactions'],
+        'current_node_url' : blockchain_data['current_node_url'],
+        'network_nodes' : blockchain_data['network_nodes']
+    }
+    return jsonify(response), 200
 
 
 @app.route('/transaction', methods=['POST']) # pending_transactions에 transaction 추가
@@ -143,31 +155,39 @@ def receive_new_block():
             'newBlock': new_block
         })
 
+#가장 긴 블럭 찾기
 @app.route('/consensus', methods=['GET'])
 def consensus():
     request_promises = []
-    for network_node_url in bitcoin.network_nodes:
+    for network_node_url in bitcoin.network_nodes: #순회할 연결된 노드 저장
         request_promises.append(requests.get(network_node_url + '/blockchain'))
 
     blockchains = [rp.json() for rp in request_promises]
+    # 현재 노드의 길이
     current_chain_length = len(bitcoin.chain)
     max_chain_length = current_chain_length
     new_longest_chain = None
     new_pending_transactions = None
 
-    for blockchain in blockchains:
-        if len(blockchain['chain']) > max_chain_length:
-            max_chain_length = len(blockchain['chain'])
-            new_longest_chain = blockchain['chain']
-            new_pending_transactions = blockchain['pending_transactions']
+    #hint python에서 None의 경우 boolean type으로 사용할때 flase로 사용됨
 
+    for blockchain in blockchains:
+        #채우시오: #만약 특정 노드의 길이가 max_chain_length보다 길다면
+        if len(blockchain['chain']) > max_chain_length:
+            #찾은 노드의 길이를 max_chain_length로 바꿈
+            max_chain_length = len(blockchain['chain'])
+            #chain도 바꿈
+            new_longest_chain = blockchain['chain']
+            #pending transaction도 바꿈
+            new_pending_transactions = blockchain['pending_transactions']
+    #채우시오 or (채우시오 and not 채우시오): new_longest_chain 값이 없거나 값이 있는데 유효하지 않으며면 chain을 교체하지 않음
     if not new_longest_chain or (new_longest_chain and not bitcoin.chain_is_valid(new_longest_chain)):
         return jsonify({
             'note': 'Current chain has not been replaced.',
             'chain': bitcoin.chain
         })
 
-    else:
+    else: #아니라면 블록 교체
         bitcoin.chain = new_longest_chain
         bitcoin.pending_transactions = new_pending_transactions
         return jsonify({
